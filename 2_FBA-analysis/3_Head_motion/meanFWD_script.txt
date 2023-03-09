@@ -1,0 +1,57 @@
+
+
+# MEAN FRAMEWISE DISPLACEMENT - HEAD MOTION ESTIMATION 
+
+# copy raw dwi files & bvec/bval files into working directory
+bash batch_copy_rawdwi_total.sh
+
+# convert raw NIFTI files to MIF format:
+for i in `ls -d *`; do echo $i; mrconvert $i/"*dwi.nii.gz" $i/dwi_raw.mif -fslgrad $i/"*dwi.bvec" $i/"*dwi.bval"; done
+
+
+# extract all non-b0 images and concatenate them into a single file in NIFTI format:
+for i in `ls -d *`; do echo $i; dwiextract $i/dwi_raw.mif $i/dwi_raw_no_b0s.nii.gz -no_bzero; done
+
+# run fsl motion outliers script for framewise displacement rate:
+for i in `ls -d *`; do fsl_motion_outliers -i $i/dwi_raw_no_b0s.nii.gz -o $i/confound_file_$i -s $i/fd_$i.txt --fd; done
+mkdir ../motion
+mkdir ../motion/confounds
+for i in `ls -d *`; do cp $i/fd_$i.txt ../motion/fd_$i.txt; done
+for i in `ls -d *`; do cp $i/confound_file_$i ../motion/confounds/confound_file_$i; done
+
+
+# IN R 
+
+#load up some libraries:
+
+library (reshape) #load reshape library
+library (Hmisc) #required for %nin%
+library (plyr) #required for ddply
+library(psych) #required for descriptives
+library(ggplot2) #required for plotting
+library(tidyverse) #suite of tidy packages
+library(ggpubr) #to create pub ready plots
+library(knitr) #to create beautiful tables
+
+
+# FWD 
+
+# read all txt files into R
+temp = list.files(pattern="*.txt")
+for (i in 1:length(temp)) assign(temp[i], read.table(temp[i]))
+
+# remove first cell from each df - the first cell is not included in calculating FWD
+lst <- mget(ls(pattern='fd_'))
+lst <- lapply(lst, `[`, -c(1), )
+
+# put the newly created lists into a data frame
+df = as.data.frame(lst)
+
+# do summary stats for each subject
+sumstats = describe(df)
+
+write.csv(sumstats, "fwd_total.csv", row.names = TRUE)
+
+
+######################################################################################################################
+
